@@ -1,7 +1,13 @@
 #!/usr/bin/env python
 
 from setuptools import setup
-from intacct import __title__,__version__,__license__,__author__,__email__
+
+__title__ = 'intacct'
+__version__ = '0.0.1'
+__author__ = 'Jon Nalley'
+__email__ = 'code@bluebot.org'
+__license__ = 'MIT'
+__copyright__ = 'Copyright 2013, ' + __author__
 
 def doc(name):
     with open(name) as f:
