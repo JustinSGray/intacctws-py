@@ -37,9 +37,9 @@ Getting Started
     ...         userpass='myuserpass',
     ...         companyid='mycompanyid'
     ...     )
-    >>> i.getAPISession()
+    >>> i.get_api_session()
     ... True
-    >>> result = i.readByQuery('USERINFO', )
+    >>> result = i.read_by_query('USERINFO', pagesize=100)
     >>> for LOGINID in result.iter('LOGINID'):
     ...     print LOGINID.text
     ...
@@ -54,5 +54,3 @@ Limitations
 
 This module is under development and much of the functionality provided by
 the API is not yet supported.
-
-- 'returnFormat' is not supported in readByQuery()
