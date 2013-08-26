@@ -18,7 +18,7 @@ def _conditional_setattr(self, key, value):
     object.__setattr__(self, key, value)
 
 
-def _toxml(el, o):
+def _buildxml(el, o):
     """
     Create XML by recursing through the object
     """
@@ -29,18 +29,18 @@ def _toxml(el, o):
         if not value:
             continue
         if type(value) != str:
-            _toxml(ET.SubElement(el, value.__class__.__name__), value)
+            _buildxml(ET.SubElement(el, value.__class__.__name__), value)
         else:
             ET.SubElement(el, attr).text = value
 
 
-def _tostring(self):
+def _to_element_tree(self):
     """
-    Convert object to an XML string
+    Convert object to an ElementTree
     """
     el = ET.Element(self._object_name)
-    _toxml(el, self)
-    return ET.tostring(el)
+    _buildxml(el, self)
+    return el
 
 
 class ObjectDescriptor(object):
@@ -75,8 +75,10 @@ class IntacctMetaclass(type):
             else:
                 dct[prop] = ObjectDescriptor()
         dct['__setattr__'] = _conditional_setattr
-        dct['__str__'] = _tostring
+        dct['__str__'] = lambda x: ET.tostring(_to_element_tree(x))
+        dct['__call__'] = _to_element_tree
         dct['_object_name'] = properties['_object_name']
+        dct['_object_factory'] = True
         return super(IntacctMetaclass, cls).__new__(cls, name, bases, dct)
 
 

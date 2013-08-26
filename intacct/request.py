@@ -106,6 +106,10 @@ class IntacctRequest(object):
         root, function = self.create_request()
         create = ET.SubElement(function, 'create')
         for obj in args:
+            if hasattr(obj, '_object_factory'):
+                obj = obj()
+            elif type(obj) is str:
+                obj = ET.fromstring(obj)
             create.append(obj)
         return ET.tostring(root)
 
