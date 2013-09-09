@@ -9,8 +9,9 @@ from .default import cache_file, cache_objects
 
 
 class ObjectCache(dict):
-    def __init__(self):
-        self.path = os.path.join(os.path.expanduser("~"), cache_file)
+    def __init__(self, cache_dir=None):
+        cache_dir = cache_dir or os.path.expanduser("~")
+        self.path = os.path.join(cache_dir, cache_file)
         cache = {}
         if os.path.exists(self.path):
             with open(self.path, 'r') as cachefile:
