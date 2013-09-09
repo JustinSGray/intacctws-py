@@ -11,6 +11,8 @@ try:
 except ImportError:
     import xml.etree.ElementTree as ET
 
+import logging
+
 from requests.sessions import Session
 from .request import IntacctRequest
 from .default import api_url
@@ -35,6 +37,26 @@ class IntacctApi(object):
             {'Content-Type': 'x-intacct-xml-request'}
         )
         self.request = IntacctRequest(**kwargs)
+        self.log = logging.getLogger(self.__class__.__name__)
+
+    def check_response(self, xml):
+        status = getattr(
+            xml.find('operation/result/status'),
+            'text'
+        )
+        if status != 'success':
+            errorno = "-1"
+            description = []
+            for error in xml.findall('operation/result/errormessage/error'):
+                errorno = error.find('errorno').text
+                for text in (error.find('description').text,
+                             error.find('description2').text):
+                    if text:
+                        description.append(text)
+            raise Exception("Error(%s) - %s" % (
+                errorno,
+                ' '.join(description or ["unknown"])
+            ))
 
     def get_api_session(self):
         """
@@ -44,6 +66,7 @@ class IntacctApi(object):
         xml_request = self.request.get_api_session()
         r = self.connection.post(self.api_url, data=xml_request)
         xml = ET.fromstring(r.text)
+        self.check_response(xml)
         sessionid = getattr(
             xml.find('operation/result/data/api/sessionid'),
             'text'
@@ -68,6 +91,7 @@ class IntacctApi(object):
         xml_request = self.request.create(*args)
         r = self.connection.post(self.api_url, data=xml_request)
         xml = ET.fromstring(r.text)
+        self.check_response(xml)
         return xml
 
     def delete(self, *args):
@@ -87,6 +111,7 @@ class IntacctApi(object):
         xml_request = self.request.delete(*args)
         r = self.connection.post(self.api_url, data=xml_request)
         xml = ET.fromstring(r.text)
+        self.check_response(xml)
         return xml
 
     def inspect(self, **kwargs):
@@ -112,12 +137,14 @@ class IntacctApi(object):
         xml_request = self.request.inspect(**kwargs)
         r = self.connection.post(self.api_url, data=xml_request)
         xml = ET.fromstring(r.text)
+        self.check_response(xml)
         return xml
 
     def read_more(self, obj):
         xml_request = self.request.read_more(obj)
         r = self.connection.post(self.api_url, data=xml_request)
         xml = ET.fromstring(r.text)
+        self.check_response(xml)
         data = xml.find('operation/result/data')
         return data
 
@@ -136,10 +163,15 @@ class IntacctApi(object):
         assert args
         obj = args[0]
         xml_request = self.request.read_by_query(obj, **kwargs)
+        self.log.debug("REQUEST:\n%s", xml_request)
         r = self.connection.post(self.api_url, data=xml_request)
+        self.log.debug("RESPONSE:\n%s", r.text)
         xml = ET.fromstring(r.text)
+        self.check_response(xml)
         data = xml.find('operation/result/data')
-        remaining = int(data.attrib['numremaining'])
+        remaining = 0
+        if data:
+            remaining = int(data.attrib['numremaining'])
         while remaining > 0:
             newdata = self.read_more(obj)
             data.extend(newdata)
