@@ -12,10 +12,9 @@ except ImportError:
     import xml.etree.ElementTree as ET
 
 import logging
-
-from requests.sessions import Session
+log = logging.getLogger(__name__)
 from .request import IntacctRequest
-from .default import api_url
+from .default import page_size, max_page_size
 
 
 class IntacctApi(object):
@@ -31,42 +30,14 @@ class IntacctApi(object):
             userpass    This is your registered password.
             companyid   Specifies the user's company.
         """
-        self.api_url = api_url
-        self.connection = Session()
-        self.connection.headers.update(
-            {'Content-Type': 'x-intacct-xml-request'}
-        )
         self.request = IntacctRequest(**kwargs)
-        self.log = logging.getLogger(self.__class__.__name__)
-
-    def check_response(self, xml):
-        status = getattr(
-            xml.find('operation/result/status'),
-            'text'
-        )
-        if status != 'success':
-            errorno = "-1"
-            description = []
-            for error in xml.findall('operation/result/errormessage/error'):
-                errorno = error.find('errorno').text
-                for text in (error.find('description').text,
-                             error.find('description2').text):
-                    if text:
-                        description.append(text)
-            raise Exception("Error(%s) - %s" % (
-                errorno,
-                ' '.join(description or ["unknown"])
-            ))
 
     def get_api_session(self):
         """
         Obtain a sessionid and endpoint to be used for subsequent
         requests.
         """
-        xml_request = self.request.get_api_session()
-        r = self.connection.post(self.api_url, data=xml_request)
-        xml = ET.fromstring(r.text)
-        self.check_response(xml)
+        xml = self.request(ET.Element('getAPISession'))
         sessionid = getattr(
             xml.find('operation/result/data/api/sessionid'),
             'text'
@@ -76,10 +47,13 @@ class IntacctApi(object):
             'text'
         )
         if sessionid and endpoint:
-            self.api_url = endpoint
-            self.request.set_session_id(sessionid)
+            self.request.set_session_id(sessionid, endpoint)
+            log.debug(
+                "Obtained session id: %s, Using endpoint: %s",
+                sessionid, endpoint
+            )
             return True
-        raise Exception('Call to get_api_session() failed:\n%s' % r.text)
+        raise Exception("Failed to find 'sessionid' and 'endpoint'")
 
     def create(self, *args):
         """
@@ -88,31 +62,30 @@ class IntacctApi(object):
         call.  Records of different types can be created in a single call to
         the create method.
         """
-        xml_request = self.request.create(*args)
-        r = self.connection.post(self.api_url, data=xml_request)
-        xml = ET.fromstring(r.text)
-        self.check_response(xml)
-        return xml
+        assert args
+        assert len(args) <= 100
+        create = ET.Element('create')
+        for obj in args:
+            if hasattr(obj, '_object_factory'):
+                obj = obj()
+            elif type(obj) is str:
+                obj = ET.fromstring(obj)
+            create.append(obj)
+        self.request(create)
+        return True
 
-    def delete(self, *args):
+    def delete(self, object, *args):
         """
         The delete method is used to delete one or more records.  Currently,
         the system limits the user to deleting 100 records in a single call.
-
-        This function accepts either an object string and a list of keys or a
-        list of tuples in the form:
-
-            [
-                ('object1', [ 'key1', 'key2', ... ] ),
-                ('object2', [ 'key1', 'key2', ... ] ),
-                ...
-            ]
         """
-        xml_request = self.request.delete(*args)
-        r = self.connection.post(self.api_url, data=xml_request)
-        xml = ET.fromstring(r.text)
-        self.check_response(xml)
-        return xml
+        assert args
+        assert len(args) <= 100
+        delete = ET.Element('delete')
+        ET.SubElement(delete, 'object').text = object
+        ET.SubElement(delete, 'keys').text = ','.join(map(str, args))
+        self.request(delete)
+        return True
 
     def inspect(self, **kwargs):
         """
@@ -134,17 +107,24 @@ class IntacctApi(object):
                       default, the method will simply return a list of fields.
                       This is an attribute on the inspect element.
         """
-        xml_request = self.request.inspect(**kwargs)
-        r = self.connection.post(self.api_url, data=xml_request)
-        xml = ET.fromstring(r.text)
-        self.check_response(xml)
-        return xml
+        obj = kwargs.get('obj')
+        name = kwargs.get('name')
+        detail = kwargs.get('detail')
+        assert obj or name, "'obj' or 'name' is required"
+        inspect = ET.Element('inspect')
+        if detail:
+            inspect.attrib['detail'] = str(detail)
+        if obj:
+            assert not name, "only one of 'obj' or 'name' may be specified"
+            ET.SubElement(inspect, 'object').text = obj
+        else:
+            ET.SubElement(inspect, 'name').text = name
+        return self.request(inspect)
 
     def read_more(self, obj):
-        xml_request = self.request.read_more(obj)
-        r = self.connection.post(self.api_url, data=xml_request)
-        xml = ET.fromstring(r.text)
-        self.check_response(xml)
+        readmore = ET.Element('readMore')
+        ET.SubElement(readmore, 'object').text = obj
+        xml = self.request(readmore)
         data = xml.find('operation/result/data')
         return data
 
@@ -162,12 +142,15 @@ class IntacctApi(object):
         """
         assert args
         obj = args[0]
-        xml_request = self.request.read_by_query(obj, **kwargs)
-        self.log.debug("REQUEST:\n%s", xml_request)
-        r = self.connection.post(self.api_url, data=xml_request)
-        self.log.debug("RESPONSE:\n%s", r.text)
-        xml = ET.fromstring(r.text)
-        self.check_response(xml)
+        pagesize = kwargs.get('pagesize') or page_size
+        pagesize = pagesize <= max_page_size and pagesize or page_size
+        readbyquery = ET.Element('readByQuery')
+        ET.SubElement(readbyquery, 'object').text = obj
+        ET.SubElement(readbyquery, 'fields').text = kwargs.get('fields') or '*'
+        ET.SubElement(readbyquery, 'query').text = kwargs.get('query') or ''
+        ET.SubElement(readbyquery, 'returnFormat').text = 'xml'
+        ET.SubElement(readbyquery, 'pagesize').text = str(pagesize)
+        xml = self.request(readbyquery)
         data = xml.find('operation/result/data')
         remaining = 0
         if data:
