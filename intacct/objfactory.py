@@ -5,6 +5,7 @@ except ImportError:
 
 from weakref import WeakKeyDictionary
 from .objcache import ObjectCache
+from .types import IntacctObjectType
 
 
 def _conditional_setattr(self, key, value):
@@ -38,7 +39,7 @@ def _to_element_tree(self):
     """
     Convert object to an ElementTree
     """
-    el = ET.Element(self._object_name)
+    el = ET.Element(self.__class__.__name__)
     _buildxml(el, self)
     return el
 
@@ -77,8 +78,6 @@ class IntacctMetaclass(type):
         dct['__setattr__'] = _conditional_setattr
         dct['__str__'] = lambda x: ET.tostring(_to_element_tree(x))
         dct['__call__'] = _to_element_tree
-        dct['_object_name'] = properties['_object_name']
-        dct['_object_factory'] = True
         return super(IntacctMetaclass, cls).__new__(cls, name, bases, dct)
 
 
@@ -88,5 +87,5 @@ def ObjectFactory(typename, **kwargs):
     """
     cache = ObjectCache()
     return IntacctMetaclass.__new__(
-        IntacctMetaclass, typename, cache, (object,), dict(**kwargs)
+        IntacctMetaclass, typename, cache, (IntacctObjectType,), dict(**kwargs)
     )()

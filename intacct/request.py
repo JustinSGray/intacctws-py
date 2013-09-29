@@ -78,8 +78,13 @@ class IntacctRequest(object):
         log.debug("Request: %s", xmltext)
         r = self.connection.post(self.url, data=xmltext)
         log.debug("Response: %s", ' '.join(r.text.splitlines()))
-        xml = ET.fromstring(r.text)
-        status = getattr(xml.find('operation/result/status'), 'text')
-        if status == 'success':
-            return xml
-        raise Exception(r.text)
+        try:
+            r.raise_for_status()
+            xml = ET.fromstring(r.text)
+            status = getattr(xml.find('operation/result/status'), 'text')
+            if status == 'success':
+                return xml
+        except:
+            pass
+        raise Exception("Status: %d, Response: '%s'" % (
+            r.status_code, r.text))

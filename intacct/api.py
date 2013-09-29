@@ -15,6 +15,23 @@ import logging
 log = logging.getLogger(__name__)
 from .request import IntacctRequest
 from .default import page_size, max_page_size
+from .types import IntacctObjectType
+
+
+def objToEl(el, objects):
+    """
+    Convert 'object' arguments to ET.Element types
+    and append them to el.
+    """
+    assert ET.iselement(el)
+    for obj in objects:
+        if isinstance(obj, IntacctObjectType):
+            obj = obj()
+        elif isinstance(obj, str):
+            obj = ET.fromstring(obj)
+        if not ET.iselement(obj):
+            raise Exception('Unable to process object: %s' % str(obj))
+        el.append(obj)
 
 
 class IntacctApi(object):
@@ -55,6 +72,24 @@ class IntacctApi(object):
             return True
         raise Exception("Failed to find 'sessionid' and 'endpoint'")
 
+    def update(self, *args):
+        """
+        Update one or more records. Currently, the system limits the
+        user to updating 100 records in a single call. The system will
+        only update fields included in the records. Fields not included
+        will be ignored. To set a field's value to null, pass an empty
+        field element. Multiple types of objects can be updated in a
+        single call to the update method. Each object starts with an
+        outermost element that indicates the type of object. Inside the
+        type element are the fields and values to be updated.
+        """
+        assert args
+        assert len(args) <= 100
+        update = ET.Element('update')
+        objToEl(update, args)
+        self.request(update)
+        return True
+
     def create(self, *args):
         """
         The create method is used to create one or more records.  Currently,
@@ -65,12 +100,7 @@ class IntacctApi(object):
         assert args
         assert len(args) <= 100
         create = ET.Element('create')
-        for obj in args:
-            if hasattr(obj, '_object_factory'):
-                obj = obj()
-            elif type(obj) is str:
-                obj = ET.fromstring(obj)
-            create.append(obj)
+        objToEl(create, args)
         self.request(create)
         return True
 
