@@ -151,6 +151,43 @@ class IntacctApi(object):
             ET.SubElement(inspect, 'name').text = name
         return self.request(inspect)
 
+    def read(self, object, *args, **kwargs):
+        """
+        Retrieve one or more records from Intacct given a list of record
+        keys.  The record key for custom objects is always the id field.
+        For standard objects, the key is defined as the recordno in the
+        object definition.
+        """
+        fields = kwargs.get('fields') or ['*']
+        assert isinstance(fields, list)
+        read = ET.Element('read')
+        ET.SubElement(read, 'object').text = object
+        ET.SubElement(read, 'fields').text = ','.join(map(str, fields))
+        keys = ET.SubElement(read, 'keys')
+        if args:
+            keys.text = ','.join(map(str, args))
+        xml = self.request(read)
+        data = xml.find('operation/result/data')
+        return data
+
+    def read_by_name(self, object, *args, **kwargs):
+        """
+        Retrieve one or more records from Intacct given a list of record
+        names. The record name for custom objects is always the name
+        field. For standard objects, the key is defined differently for
+        each object type; see the object definition for details.
+        """
+        fields = kwargs.get('fields') or ['*']
+        assert isinstance(fields, list)
+        assert args
+        rbn = ET.Element('readByName')
+        ET.SubElement(rbn, 'object').text = object
+        ET.SubElement(rbn, 'fields').text = ','.join(map(str, fields))
+        ET.SubElement(rbn, 'keys').text = ','.join(map(str, args))
+        xml = self.request(rbn)
+        data = xml.find('operation/result/data')
+        return data
+
     def read_more(self, obj):
         readmore = ET.Element('readMore')
         ET.SubElement(readmore, 'object').text = obj
