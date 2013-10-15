@@ -29,7 +29,12 @@ def _buildxml(el, o):
         value = getattr(o, attr)
         if not value:
             continue
+        if type(value) in [int, float]:
+            value = str(value)
         if type(value) != str:
+            if not any([not a.startswith('_') and getattr(value, a)
+                        for a in dir(value)]):
+                            continue
             _buildxml(ET.SubElement(el, value.__class__.__name__), value)
         else:
             ET.SubElement(el, attr).text = value
