@@ -8,6 +8,38 @@ from .api import IntacctApi
 from .default import cache_file, cache_objects
 
 
+FIXUP_FIELDS = {
+    'USERINFO': {
+        'SSO_ENABLED': {
+            'externalDataName': 'boolean',
+            'isReadOnly': 'false',
+            'isRequired': 'false',
+            'maxLength': '0'
+        },
+        'SSO_FEDERATED_ID': {
+            'externalDataName': 'string',
+            'isReadOnly': 'false',
+            'maxLength': '200'
+        },
+        'SSO_COMPANY_ENABLED': {
+            'externalDataName': 'string',
+            'isReadOnly': 'false',
+            'isRequired': 'false',
+            'maxLength': '0'
+        },
+    }
+}
+
+
+def fixup(cache):
+    """
+    Unfortunately inspect does not return all the fields
+    for the USERINFO object.  This function adds the missing
+    single sign on fields.
+    """
+    cache['USERINFO'].update(FIXUP_FIELDS['USERINFO'])
+
+
 class ObjectCache(dict):
     def __init__(self, cache_dir=None):
         cache_dir = cache_dir or os.path.expanduser("~")
@@ -70,6 +102,7 @@ class ObjectCache(dict):
             # cache[objname]['__required__'] = required
             cache[objname]['_object_name'] = objname
             cache[item] = cache[objname]
+        fixup(cache)
         with open(self.path, 'w') as cachefile:
             pickle.dump(cache, cachefile)
         super(ObjectCache, self).__init__(cache)
